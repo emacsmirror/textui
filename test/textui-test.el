@@ -212,6 +212,48 @@ not press a native control below its own measurement."
     (should (string-match-p "│ Hello    │" (nth 2 lines)))
     (should (equal (car (last lines)) "└──────────┘"))))
 
+(ert-deftest textui-box-face-covers-every-cell-of-the-box ()
+  (let ((buffer (generate-new-buffer " *textui-surface-test*"))
+        (on (lambda (position)
+              (memq 'bold (ensure-list (get-text-property position 'face))))))
+    (unwind-protect
+        (with-current-buffer buffer
+          (textui-mode)
+          (setq-local textui--last-width 30)
+          (setq-local
+           textui--render-function
+           (lambda (_width)
+             '((:type :flex :direction :row :gap 2
+                :children
+                ((:type :flex :direction :column :gap 0 :padding 1 :face bold
+                  :layout (:width 12)
+                  :children
+                  ((:type item :format "%v" :value "Hi")
+                   (:type push-button :value "go")))
+                 (:type item :format "%v" :value "Out"))))))
+          (textui-refresh buffer)
+          (goto-char (point-min))
+          ;; The padding row above the content is part of the box.
+          (should (funcall on (point)))
+          (should (funcall on (+ (point) 11)))
+          (should-not (funcall on (+ (point) 12)))
+          (search-forward "Out")
+          (should-not (funcall on (match-beginning 0)))
+          (search-forward "Hi")
+          (should (funcall on (match-beginning 0)))
+          (should (funcall on (1- (match-beginning 0))))
+          ;; A widget the box contains is created after the box is laid out
+          ;; and still sits on the surface.
+          (search-forward "[go]")
+          (should (funcall on (match-beginning 0))))
+      (kill-buffer buffer))))
+
+(ert-deftest textui-box-face-must-be-a-face ()
+  (should-error
+   (textui--render-frame
+    '((:type :flex :direction :column :face "bold" :children ()))
+    10)))
+
 (ert-deftest textui-column-gap-counts-blank-lines ()
   (let ((frame
          '((:type :flex :direction :column :gap 1

@@ -4,7 +4,7 @@
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;; Author: chenyibin
-;; Version: 0.8.0
+;; Version: 0.9.0
 ;; Package-Requires: ((emacs "29.1"))
 ;; Keywords: convenience, widgets
 
@@ -244,6 +244,9 @@ PROPERTIES lists every accepted property."
   (when (and (textui--plist-member-p element :border)
              (not (memq (plist-get element :border) '(nil t))))
     (error ":border must be nil or t: %S" (plist-get element :border)))
+  (let ((face (plist-get element :face)))
+    (unless (or (symbolp face) (consp face))
+      (error ":face must be a face or a face list: %S" face)))
   (let ((children (plist-get element :children)))
     (unless (textui--proper-list-p children)
       (error "%S :children must be a proper list: %S" type children)))
@@ -253,7 +256,7 @@ PROPERTIES lists every accepted property."
   "Validate the TextUI flex ELEMENT."
   (textui--validate-layout-container
    element :flex
-   '(:type :direction :gap :padding :border :children :layout))
+   '(:type :direction :gap :padding :border :face :children :layout))
   (unless (memq (plist-get element :direction) '(:row :column))
     (error ":flex :direction must be :row or :column: %S"
            (plist-get element :direction))))
@@ -263,7 +266,7 @@ PROPERTIES lists every accepted property."
   (textui--validate-layout-container
    element :grid
    '(:type :columns :min-column-width :gap :column-gap :row-gap :padding
-     :border :children :layout))
+     :border :face :children :layout))
   (dolist (property '(:columns :min-column-width))
     (let ((value (plist-get element property)))
       (unless (and (integerp value) (> value 0))
@@ -1262,6 +1265,33 @@ COLUMN-GAP cells separate tracks and ROW-GAP blank lines separate grid rows."
         (setq row (1+ row)))))
   lines)
 
+(defun textui--tag-surface (lines face)
+  "Give every cell of LINES not yet on a surface the surface FACE.
+An inner box tags its cells first, so the innermost surface wins."
+  (when face
+    (dolist (line lines)
+      (let ((index 0))
+        (while (< index (length line))
+          (let ((next (next-single-property-change
+                       index 'textui--surface line (length line))))
+            (unless (get-text-property index 'textui--surface line)
+              (put-text-property index next 'textui--surface face line))
+            (setq index next))))))
+  lines)
+
+(defun textui--apply-surfaces (from to)
+  "Turn the `textui--surface' cells between FROM and TO into faces.
+The surface face is appended, so a face the content sets itself shows on
+top of it."
+  (let ((position from))
+    (while (< position to)
+      (let ((next (next-single-property-change
+                   position 'textui--surface nil to))
+            (face (get-text-property position 'textui--surface)))
+        (when face
+          (add-face-text-property position next face t))
+        (setq position next)))))
+
 (defun textui--pixel-box-lines (body body-width)
   "Return BODY wrapped in borders whose right edge is BODY-WIDTH cells wide.
 The right border is appended after the prefix is padded, so the box stays
@@ -1304,16 +1334,18 @@ advance by exactly one cell."
     (dotimes (_ padding)
       (push blank-body body))
     (setq body (nreverse body))
-    (textui--tag-layout-cells
-     (if border
-         (if metrics
-             (textui--pixel-box-lines body body-width)
-           (append
-            (list (concat "┌" (make-string body-width ?─) "┐"))
-            (mapcar (lambda (line) (concat "│" line "│")) body)
-            (list (concat "└" (make-string body-width ?─) "┘"))))
-       body)
-     location-id)))
+    (textui--tag-surface
+     (textui--tag-layout-cells
+      (if border
+          (if metrics
+              (textui--pixel-box-lines body body-width)
+            (append
+             (list (concat "┌" (make-string body-width ?─) "┐"))
+             (mapcar (lambda (line) (concat "│" line "│")) body)
+             (list (concat "└" (make-string body-width ?─) "┘"))))
+        body)
+      location-id)
+     (plist-get element :face))))
 
 (defun textui--render-flex-spec (spec width)
   "Render flex SPEC inside total border-box WIDTH."
@@ -1538,6 +1570,9 @@ Keep existing widget and focus records when APPEND is non-nil."
            (to (nth 1 range))
            (element (nth 2 range))
            (location-id (nth 3 range))
+           ;; The widget replaces the placeholder text, so carry the
+           ;; placeholder's surface over to whatever the widget inserts.
+           (surface (get-text-property from 'textui--surface))
            (expected-width
             (string-width (buffer-substring-no-properties from to))))
       (remove-text-properties from to '(textui--placeholder nil))
@@ -1592,6 +1627,8 @@ Keep existing widget and focus records when APPEND is non-nil."
         (let ((actual-end (point)))
           (put-text-property from actual-end
                              'textui--location-id location-id)
+          (when surface
+            (put-text-property from actual-end 'textui--surface surface))
           (textui--compensate-image-runs
            (widget-get widget :from) (widget-get widget :to))
           (push widget textui--widgets)
@@ -1607,6 +1644,7 @@ Keep existing widget and focus records when APPEND is non-nil."
                 (error "Duplicate focus ID: %S" focus-id))
               (push (list focus-id from actual-end)
                     textui--focus-anchors)))))))
+  (textui--apply-surfaces (or from (point-min)) (or to (point-max)))
   (widget-setup)
   (dolist (widget textui--widgets)
     (textui--inset-widget-field-box widget)))

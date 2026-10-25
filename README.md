@@ -240,6 +240,11 @@ For a bordered or padded layout element, its allocated width includes the
 border and padding. Native widgets cannot use `:min-width` because TextUI cannot
 make their own presentation narrower.
 
+A flex or grid element may take `:face`, a face or face list. Every cell of the
+box gets it as a surface: padding, gaps, border, and the content, including
+widgets created after layout. The surface is appended, so a face the content
+sets itself shows on top of it, and a nested box's surface wins inside that box.
+
 ### Grid
 
 Grid places children into equal-width tracks in source order:
