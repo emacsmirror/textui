@@ -3,10 +3,14 @@
 This file records user-visible changes to TextUI. Dates use the release tag's
 calendar date.
 
-## Unreleased
+## [0.9.0] - 2026-10-25
 
 ### Added
 
+- Let `:flex` and `:grid` take `:face`, a surface face for every cell of the
+  box: padding, gaps, border, and content, including widgets created after
+  layout. The surface is appended under the content's own faces, and the
+  innermost box's surface wins.
 - Publish TextUI's layout geometry as `textui-layout-*` in the new
   `textui-layout.el`. `textui-layout-solve` and `textui-layout-grid` lay a row
   or a grid out and return one placement, `(:row R :column C :width W)`, per
@@ -273,6 +277,7 @@ are under [`test/performance/`](test/performance/README.md).
 - In the btop 50-process fixture, routed detail updates improved from a median
   of 11.65 ms to 5.67 ms while retaining native `widget.el` push-button rows.
 
+[0.9.0]: https://github.com/yibie/textui/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/yibie/textui/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/yibie/textui/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/yibie/textui/compare/v0.6.0...v0.7.0
